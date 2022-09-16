@@ -13,7 +13,6 @@ const path = window.location.pathname.replace(/[\/]+$/, '');
 const wsUrl = [protocol, '//', window.location.host, path, '/ws', window.location.search].join('');
 const tokenUrl = [window.location.protocol, '//', window.location.host, path, '/token'].join('');
 const clientOptions = {
-    rendererType: 'webgl',
     disableLeaveAlert: false,
     disableResizeOverlay: false,
     titleFixed: null,
@@ -42,6 +41,7 @@ const termOptions = {
         brightCyan: '#37e6e8',
         brightWhite: '#f1f1f0',
     } as ITheme,
+    allowProposedApi: true,
 } as ITerminalOptions;
 
 export class App extends Component {

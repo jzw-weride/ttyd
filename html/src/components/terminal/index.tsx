@@ -1,8 +1,9 @@
 import { bind } from 'decko';
 import { Component, h } from 'preact';
-import { ITerminalOptions, RendererType, Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { ITerminalOptions, Terminal } from 'xterm';
+import { CanvasAddon } from 'xterm-addon-canvas';
 import { WebglAddon } from 'xterm-addon-webgl';
+import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { ImageAddon } from 'xterm-addon-image';
 import { OverlayAddon } from './overlay';
@@ -37,7 +38,6 @@ const enum Command {
 }
 
 export interface ClientOptions {
-    rendererType: 'dom' | 'canvas' | 'webgl';
     disableLeaveAlert: boolean;
     disableResizeOverlay: boolean;
     titleFixed: string;
@@ -60,7 +60,6 @@ export class Xterm extends Component<Props> {
     private fitAddon: FitAddon;
     private overlayAddon: OverlayAddon;
     private zmodemAddon: ZmodemAddon;
-    private webglAddon: WebglAddon;
 
     private socket: WebSocket;
     private token: string;
@@ -212,51 +211,29 @@ export class Xterm extends Component<Props> {
     }
 
     @bind
-    private setRendererType(value: 'webgl' | RendererType) {
-        const { terminal } = this;
-
-        const disposeWebglRenderer = () => {
-            try {
-                this.webglAddon?.dispose();
-            } catch {
-                // ignore
-            }
-            this.webglAddon = undefined;
-        };
-
-        switch (value) {
-            case 'webgl':
-                if (this.webglAddon) return;
-                try {
-                    if (window.WebGL2RenderingContext && document.createElement('canvas').getContext('webgl2')) {
-                        this.webglAddon = new WebglAddon();
-                        this.webglAddon.onContextLoss(() => {
-                            disposeWebglRenderer();
-                        });
-                        terminal.loadAddon(this.webglAddon);
-                        console.log(`[ttyd] WebGL renderer enabled`);
-                    }
-                } catch (e) {
-                    console.warn(`[ttyd] webgl2 init error`, e);
-                }
-                break;
-            default:
-                disposeWebglRenderer();
-                console.log(`[ttyd] option: rendererType=${value}`);
-                terminal.options.rendererType = value;
-                break;
-        }
-    }
-
-    @bind
-    private applyOptions(options: any) {
+    private applyOptions(options: ITerminalOptions) {
         const { terminal, fitAddon } = this;
 
         Object.keys(options).forEach(key => {
             const value = options[key];
             switch (key) {
                 case 'rendererType':
-                    this.setRendererType(value);
+                    switch (value) {
+                        case 'canvas':
+                            terminal.loadAddon(new CanvasAddon());
+                            console.log(`[ttyd] canvas renderer enabled`);
+                            break;
+                        case 'webgl':
+                            const addon = new WebglAddon();
+                            addon.onContextLoss(() => {
+                                addon.dispose();
+                            });
+                            terminal.loadAddon(addon);
+                            console.log(`[ttyd] WebGL renderer enabled`);
+                            break;
+                        default:
+                            break;
+                    }
                     break;
                 case 'disableLeaveAlert':
                     if (value) {
@@ -274,6 +251,7 @@ export class Xterm extends Component<Props> {
                     if (value) {
                         console.log(`[ttyd] Reconnect disabled`);
                         this.reconnect = false;
+                        this.doReconnect = false;
                     }
                     break;
                 case 'titleFixed':
@@ -372,7 +350,8 @@ export class Xterm extends Component<Props> {
                 break;
             case Command.SET_PREFERENCES:
                 const prefs = JSON.parse(textDecoder.decode(data));
-                this.applyOptions(Object.assign({}, this.props.clientOptions, prefs));
+                const options = Object.assign({}, this.props.clientOptions, prefs) as ITerminalOptions;
+                this.applyOptions(options);
                 break;
             default:
                 console.warn(`[ttyd] unknown command: ${cmd}`);
